@@ -4,71 +4,110 @@ import streamlit as st
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
-# Настройка страницы для удобного отображения на смартфоне
-st.set_page_config(page_title="Журнал старосты", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Журнал колледжа", page_icon="🎓", layout="centered")
 
-# Стили Excel
+# Стили оформления Excel
 ЗЕЛЕНЫЙ = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
 КРАСНЫЙ = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 ЖЕЛТЫЙ = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 ШАПКА = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
 РАМКА = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
 
-def загрузить_книгу(группа):
+# Папка для хранения всех файлов групп
+ПАПКА_ГРУПП = "groups_data"
+os.makedirs(ПАПКА_ГРУПП, exist_ok=True)
+
+def получить_список_групп():
+    файлы = [f[:-5] for f in os.listdir(ПАПКА_ГРУПП) if f.endswith(".xlsx")]
+    return sorted(файлы)
+
+def создать_новый_журнал(название_группы):
+    путь = os.path.join(ПАПКА_ГРУПП, f"{название_группы}.xlsx")
+    if not os.path.exists(путь):
+        книга = openpyxl.Workbook()
+        л1 = книга.active
+        л1.title = "Посещаемость"
+        л1.append(["№", "ФИО Студента"])
+        
+        л2 = книга.create_sheet(title="Успеваемость")
+        л2.append(["№", "ФИО Студента"])
+        
+        for лист in [л1, л2]:
+            лист.column_dimensions["A"].width = 5
+            лист.column_dimensions["B"].width = 35
+            for ячейка in лист:
+                ячейка.font = Font(bold=True, size=11)
+                ячейка.fill = ШАПКА
+                ячейка.alignment = Alignment(horizontal="center")
+                ячейка.border = РАМКА
+        книга.save(путь)
+    return путь
+
+st.title("🎓 Электронный журнал колледжа")
+
+# --- БОКОВАЯ ПАНЕЛЬ (УПРАВЛЕНИЕ ГРУППАМИ) ---
+with st.sidebar:
+    st.header("🏫 Управление группами")
+    
+    # Создание новой группы
+    новая_группа = st.text_input("Создать новую группу:", placeholder="Например: ИС-21")
+    if st.button("➕ Добавить группу", use_container_width=True):
+        имя_чистое = новая_группа.strip().replace("/", "-").replace("\\", "-")
+        if имя_чистое:
+            создать_новый_журнал(имя_чистое)
+            st.success(f"Группа {имя_чистое} создана!")
+            st.rerun()
+        else:
+            st.warning("Введите название группы")
+
+    st.divider()
+    
+    # Загрузка готового Excel-файла с телефона
+    st.write("📤 **Загрузить готовый журнал (.xlsx):**")
+    загруженный_файл = st.file_uploader("Выберите файл", type=["xlsx"], label_visibility="collapsed")
+    if загруженный_файл is not None:
+        путь_сохранения = os.path.join(ПАПКА_ГРУПП, загруженный_файл.name)
+        with open(путь_сохранения, "wb") as f:
+            f.write(загруженный_файл.getbuffer())
+        st.success(f"Файл {загруженный_файл.name} загружен!")
+
+# --- ОСНОВНОЙ ЭКРАН: ВЫБОР ГРУППЫ ---
+список_групп = получить_список_групп()
+
+if not список_групп:
+    st.info("👋 Пока не создано ни одной группы. Создайте первую группу ниже или в меню слева (значок `>` в левом верхнем углу экрана).")
+    старт_группа = st.text_input("Название вашей группы (например, 56-51):", placeholder="56-51")
+    if st.button("Создать журнал группы", type="primary"):
+        if старт_группа.strip():
+            создать_новый_журнал(старт_группа.strip())
+            st.rerun()
+else:
+    группа = st.selectbox("📌 Выберите учебную группу:", список_групп)
     имя_файла = f"{группа}.xlsx"
-    if os.path.exists(имя_файла):
-        return openpyxl.load_workbook(имя_файла), имя_файла
+    путь_к_файлу = os.path.join(ПАПКА_ГРУПП, имя_файла)
     
-    книга = openpyxl.Workbook()
-    л1 = книга.active
-    л1.title = "Посещаемость"
-    л1.append(["№", "ФИО Студента"])
-    
-    л2 = книга.create_sheet(title="Успеваемость")
-    л2.append(["№", "ФИО Студента"])
-    
-    for лист in [л1, л2]:
-        лист.column_dimensions["A"].width = 5
-        лист.column_dimensions["B"].width = 35
-        for ячейка in лист:
-            ячейка.font = Font(bold=True, size=11)
-            ячейка.fill = ШАПКА
-            ячейка.alignment = Alignment(horizontal="center")
-            ячейка.border = РАМКА
-    книга.save(имя_файла)
-    return книга, имя_файла
-
-st.title("🎓 Электронный журнал старосты")
-
-# Выбор группы
-группа = st.text_input("Введите название группы (например, ИС-21):", value="ИС-21").strip()
-
-if группа:
-    книга, имя_файла = загрузить_книгу(группа)
+    книга = openpyxl.load_workbook(путь_к_файлу)
     лист_посещ = книга["Посещаемость"]
     лист_успев = книга["Успеваемость"]
 
-    # Кнопка скачивания готового Excel-файла прямо в телефон
-    with open(имя_файла, "rb") as file:
+    # Кнопка скачивания Excel
+    with open(путь_к_файлу, "rb") as file:
         st.download_button(
-            label=f"📥 Скачать журнал {группа}.xlsx",
+            label=f"📥 Скачать Excel-журнал ({имя_файла})",
             data=file,
             file_name=имя_файла,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
-    # Вкладки для мобильного экрана
     вкладка1, вкладка2, вкладка3, вкладка4 = st.tabs(["✅ Посещаемость", "⭐ Оценки", "📊 Сводка", "👥 Студенты"])
 
     # --- ВКЛАДКА 1: ПОСЕЩАЕМОСТЬ ---
     with вкладка1:
         if лист_посещ.max_row <= 1:
-            st.warning("Сначала добавьте студентов во вкладке '👥 Студенты'.")
+            st.warning("Сначала добавьте список студентов во вкладке '👥 Студенты'.")
         else:
             дата = st.text_input("Дата занятия:", value=datetime.now().strftime("%d.%m"))
-            st.write("Отметьте присутствующих:")
-            
             отметки = {}
             for row in range(2, лист_посещ.max_row + 1):
                 фио = лист_посещ.cell(row=row, column=2).value
@@ -76,7 +115,7 @@ if группа:
                     f"{row - 1}. {фио}",
                     ["+", "н", "у"],
                     horizontal=True,
-                    key=f"att_{row}"
+                    key=f"att_{группа}_{row}"
                 )
             
             if st.button("Сохранить посещаемость", type="primary", use_container_width=True):
@@ -99,18 +138,18 @@ if группа:
                     яч.border = РАМКА
                     яч.fill = ЗЕЛЕНЫЙ if знач == "+" else (КРАСНЫЙ if знач == "н" else ЖЕЛТЫЙ)
                 
-                книга.save(имя_файла)
-                st.success(f"Посещаемость за {дата} сохранена!")
+                книга.save(путь_к_файлу)
+                st.success(f"Посещаемость группы {группа} за {дата} сохранена!")
 
     # --- ВКЛАДКА 2: ОЦЕНКИ ---
     with вкладка2:
         if лист_успев.max_row <= 1:
             st.warning("Сначала добавьте студентов во вкладке '👥 Студенты'.")
         else:
-            предмет = st.text_input("Название предмета:", placeholder="Например: Информатика")
+            предмет = st.text_input("Название предмета:", placeholder="Например: Информатика", key=f"subj_{группа}")
             студенты = [лист_успев.cell(row=r, column=2).value for r in range(2, лист_успев.max_row + 1)]
-            выбранный_студент = st.selectbox("Выберите студента:", студенты)
-            оценка = st.selectbox("Оценка:", ["5", "4", "3", "2", "зачет", "незачет"])
+            выбранный_студент = st.selectbox("Студент:", студенты, key=f"stud_{группа}")
+            оценка = st.selectbox("Оценка:", ["5", "4", "3", "2", "зачет", "незачет"], key=f"grade_{группа}")
             
             if st.button("Поставить оценку", type="primary", use_container_width=True):
                 if not предмет.strip():
@@ -134,7 +173,7 @@ if группа:
                     яч.value = f"{яч.value}, {оценка}" if яч.value else оценка
                     яч.alignment = Alignment(horizontal="center")
                     яч.border = РАМКА
-                    книга.save(имя_файла)
+                    книга.save(путь_к_файлу)
                     st.success(f"Оценка '{оценка}' выставлена ({выбранный_студент})!")
 
     # --- ВКЛАДКА 3: СВОДКА ---
@@ -172,18 +211,23 @@ if группа:
 
     # --- ВКЛАДКА 4: СТУДЕНТЫ ---
     with вкладка4:
-        новое_фио = st.text_input("ФИО нового студента:", placeholder="Иванов Иван")
-        if st.button("Добавить в группу", use_container_width=True):
-            if новое_фио.strip():
-                for имя_л in ["Посещаемость", "Успеваемость"]:
-                    л = книга[имя_л]
-                    л.append([л.max_row, новое_фио.strip()])
-                    for яч in л[л.max_row]:
-                        яч.border = РАМКА
-                книга.save(имя_файла)
-                st.success(f"Студент {новое_фио} добавлен!")
-                st.rerun()
-        
-        st.subheader("Текущий список:")
-        for row in range(2, лист_посещ.max_row + 1):
-            st.write(f"**{row - 1}.** {лист_посещ.cell(row=row, column=2).value}")
+        st.write("Вставьте список студентов (каждый с новой строки):")
+        список_текстом = st.text_area("ФИО студентов:", placeholder="Иванов Иван\nПетрова Анна\nСидоров Алексей", height=120, key=f"area_{группа}")
+        if st.button("Добавить в группу", type="primary", use_container_width=True):
+            строки = [s.strip() for s in список_текстом.split("\n") if s.strip()]
+            if строки:
+                for фио in строки:
+                    for имя_л in ["Посещаемость", "Успеваемость"]:
+                        л = книга[имя_л]
+                        л.append([л.max_row, фио])
+                        for яч in л[л.max_row]:
+                            яч.border = РАМКА
+                            книга.save(путь_к_файлу)
+                            st.success(f"Добавлено студентов: {len(строки)}!")
+                            st.rerun()
+                            st.subheader(f"Состав группы {группа}:")
+                            if лист_посещ.max_row <= 1:
+                                st.write("Список пока пуст.")
+                            else:
+                                for row in range(2, лист_посещ.max_row + 1):
+                                    st.write(f"{row - 1}. {лист_посещ.cell(row=row, column=2).value}")

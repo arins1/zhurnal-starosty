@@ -35,7 +35,7 @@ def создать_новый_журнал(название_группы):
         for лист in [л1, л2]:
             лист.column_dimensions["A"].width = 5
             лист.column_dimensions["B"].width = 35
-            for ячейка in лист:
+            for ячейка in лист[1]:
                 ячейка.font = Font(bold=True, size=11)
                 ячейка.fill = ШАПКА
                 ячейка.alignment = Alignment(horizontal="center")
